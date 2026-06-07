@@ -1,33 +1,23 @@
 "use client";
 
-import { Menu, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useState } from "react";
-import { CATEGORIES } from "@/lib/constants";
 
 interface HeaderProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
   onLogoClick: () => void;
-  selectedCategory: string;
-  onSelectCategory: (slug: string) => void;
-  onOpenSignup?: () => void;
 }
-
-const DESKTOP_NAV = CATEGORIES;
 
 export function Header({
   searchQuery,
   onSearchChange,
   onLogoClick,
-  selectedCategory,
-  onSelectCategory,
-  onOpenSignup,
 }: HeaderProps) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
-  const handleCategory = (slug: string) => {
-    onSelectCategory(slug);
-    setMobileMenuOpen(false);
+  const clearSearch = () => {
+    onSearchChange("");
   };
 
   return (
@@ -47,111 +37,83 @@ export function Header({
           </span>
         </button>
 
-        <nav
-          className="no-scrollbar hidden min-w-0 flex-1 items-center justify-center gap-1 overflow-x-auto lg:flex"
-          aria-label="Browse categories"
-        >
-          {DESKTOP_NAV.map((category) => (
+        <div className="nav-search-wrap hidden sm:block">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--mute)]"
+            aria-hidden="true"
+          />
+          <label htmlFor="desktop-search" className="sr-only">
+            Search catalog
+          </label>
+          <input
+            id="desktop-search"
+            type="search"
+            value={searchQuery}
+            onChange={(event) => onSearchChange(event.target.value)}
+            className="search-input"
+            placeholder="Search apps, tools, repos"
+            autoComplete="off"
+          />
+          {searchQuery && (
             <button
-              key={category.slug}
               type="button"
-              onClick={() => handleCategory(category.slug)}
-              className={`nav-link ${
-                selectedCategory === category.slug ? "nav-link-active" : ""
-              }`}
+              className="search-clear-btn"
+              onClick={clearSearch}
+              aria-label="Clear search"
             >
-              <span aria-hidden="true">{category.icon}</span>
-              {category.name.replace("Discover ", "")}
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
-          ))}
-        </nav>
-
-        <div className="ml-auto hidden items-center gap-2 md:flex">
-          <div className="relative w-[220px]">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--mute)]"
-              aria-hidden="true"
-            />
-            <input
-              id="main-search"
-              type="search"
-              value={searchQuery}
-              onChange={(event) => onSearchChange(event.target.value)}
-              className="search-input"
-              placeholder="Search apps"
-              autoComplete="off"
-            />
-          </div>
-
-          <button
-            type="button"
-            className="btn-secondary-sm nav-cta hidden xl:inline-flex"
-            onClick={onOpenSignup}
-          >
-            Log in
-          </button>
-          <button
-            id="signup-btn"
-            type="button"
-            className="btn-primary-sm nav-cta"
-            onClick={onOpenSignup}
-          >
-            Sign up
-          </button>
+          )}
         </div>
 
         <button
           type="button"
-          className="btn-icon-circular ml-auto md:hidden"
-          onClick={() => setMobileMenuOpen((open) => !open)}
-          aria-label="Toggle menu"
-          aria-expanded={mobileMenuOpen}
+          className="btn-icon-circular ml-auto sm:hidden"
+          onClick={() => setMobileSearchOpen((open) => !open)}
+          aria-label={mobileSearchOpen ? "Close search" : "Open search"}
+          aria-expanded={mobileSearchOpen}
+          aria-controls="mobile-search-panel"
         >
-          {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          {mobileSearchOpen ? (
+            <X className="h-4 w-4" aria-hidden="true" />
+          ) : (
+            <Search className="h-4 w-4" aria-hidden="true" />
+          )}
         </button>
       </div>
 
-      {mobileMenuOpen && (
-        <div className="border-t border-[var(--hairline)] bg-[var(--canvas)] px-4 py-4 md:hidden">
-          <div className="relative mb-4">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--mute)]"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(event) => onSearchChange(event.target.value)}
-              className="search-input"
-              placeholder="Search apps"
-              autoComplete="off"
-            />
-          </div>
-
-          <div className="grid gap-1">
-            {CATEGORIES.map((category) => (
-              <button
-                key={category.slug}
-                type="button"
-                onClick={() => handleCategory(category.slug)}
-                className={`nav-link justify-start ${
-                  selectedCategory === category.slug ? "nav-link-active" : ""
-                }`}
-              >
-                <span aria-hidden="true">{category.icon}</span>
-                {category.name}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            <button type="button" className="btn-secondary-sm" onClick={onOpenSignup}>
-              Log in
+      {mobileSearchOpen && (
+        <div
+          id="mobile-search-panel"
+          className="mobile-search-panel sm:hidden"
+        >
+          <Search
+            className="pointer-events-none absolute left-7 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--mute)]"
+            aria-hidden="true"
+          />
+          <label htmlFor="mobile-search" className="sr-only">
+            Search catalog
+          </label>
+          <input
+            id="mobile-search"
+            type="search"
+            value={searchQuery}
+            onChange={(event) => onSearchChange(event.target.value)}
+            className="search-input"
+            placeholder="Search apps, tools, repos"
+            autoComplete="off"
+            autoFocus
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="search-clear-btn"
+              onClick={clearSearch}
+              aria-label="Clear search"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
-            <button type="button" className="btn-primary-sm" onClick={onOpenSignup}>
-              Sign up
-            </button>
-          </div>
+          )}
         </div>
       )}
     </header>

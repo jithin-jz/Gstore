@@ -12,6 +12,7 @@ interface ProjectGridProps {
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
+  onSelectCategory: (slug: string) => void;
 }
 
 export function ProjectGrid({
@@ -23,6 +24,7 @@ export function ProjectGrid({
   hasNextPage,
   isFetchingNextPage,
   onLoadMore,
+  onSelectCategory,
 }: ProjectGridProps) {
   const observerRef = useRef<HTMLDivElement | null>(null);
 
@@ -62,10 +64,6 @@ export function ProjectGrid({
           <div className="section-title-stack">
             <p className="mono-label mb-3">LIVE DISCOVERY</p>
             <h2 className="type-display-lg">{sectionTitle}</h2>
-            <p className="type-body-md mt-3 max-w-2xl text-[var(--body-text)]">
-              Curated from GitHub repositories, release assets, and project
-              metadata, then ranked for fast scanning across platforms.
-            </p>
           </div>
 
           {!isLoading && !isError && (
@@ -75,6 +73,27 @@ export function ProjectGrid({
             </div>
           )}
         </div>
+
+        <nav className="catalog-toolbar" aria-label="Filter catalog categories">
+          <div className="category-filter-row no-scrollbar">
+            {CATEGORIES.map((category) => (
+              <button
+                key={category.slug}
+                type="button"
+                onClick={() => onSelectCategory(category.slug)}
+                aria-pressed={selectedCategory === category.slug}
+                className={`category-filter-btn ${
+                  selectedCategory === category.slug
+                    ? "category-filter-btn-active"
+                    : ""
+                }`}
+              >
+                <span aria-hidden="true">{category.icon}</span>
+                {category.name.replace("Discover ", "")}
+              </button>
+            ))}
+          </div>
+        </nav>
 
         {isLoading && <CatalogSkeletonGrid />}
 
