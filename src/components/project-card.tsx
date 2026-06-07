@@ -1,20 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Image from "next/image";
+import { useState } from "react";
 import type { DiscoverApp } from "@/types";
-import { Card, CardHeader, CardContent, CardFooter } from "./ui/card";
-import { Badge } from "./ui/badge";
-import { Download, Star, ShieldCheck, Cpu, Globe, Laptop, Smartphone } from "lucide-react";
-
-// Platform icons from Lucide
-const PLATFORM_ICONS: Record<string, React.ReactNode> = {
-  windows: <Laptop className="w-3 h-3" />,
-  macos: <Cpu className="w-3 h-3" />,
-  linux: <Cpu className="w-3 h-3" />,
-  android: <Smartphone className="w-3 h-3" />,
-  ios: <Smartphone className="w-3 h-3" />,
-  web: <Globe className="w-3 h-3" />,
-};
+import { Download, ExternalLink, ShieldCheck, Star } from "lucide-react";
 
 const PLATFORM_LABELS: Record<string, string> = {
   windows: "Windows",
@@ -25,99 +14,114 @@ const PLATFORM_LABELS: Record<string, string> = {
   web: "Web",
 };
 
-export function ProjectCard({ project }: { project: DiscoverApp }) {
-  const [platform, setPlatform] = useState<string>("web");
+function safeExternalLink(value: string | null | undefined, fallback: string): string {
+  if (!value) return fallback;
 
-  useEffect(() => {
-    const ua = window.navigator.userAgent.toLowerCase();
-    if (ua.includes("android")) setPlatform("android");
-    else if (ua.includes("iphone") || ua.includes("ipad") || ua.includes("ipod")) setPlatform("ios");
-    else if (ua.includes("windows")) setPlatform("windows");
-    else if (ua.includes("mac os") || ua.includes("macintosh") || ua.includes("darwin")) setPlatform("macos");
-    else if (ua.includes("linux")) setPlatform("linux");
-    else setPlatform("web");
-  }, []);
-
-  const isCompatible = project.available_platforms.includes(platform);
-  const isWebOnly = project.available_platforms.length === 1 && project.available_platforms[0] === "web";
-
-  let buttonText = "Install";
-  let buttonIcon: React.ReactNode = <Download className="w-3.5 h-3.5" />;
-  let downloadUrl = `/api/download/${project.owner}/${project.name}`;
-
-  if (isCompatible) {
-    buttonIcon = PLATFORM_ICONS[platform] || <Download className="w-3.5 h-3.5" />;
-    buttonText = `Install`;
-  } else if (isWebOnly) {
-    buttonIcon = <Globe className="w-3.5 h-3.5" />;
-    buttonText = "Open Web";
-    downloadUrl = project.homepage ?? project.repo_url;
-  } else {
-    buttonIcon = <Download className="w-3.5 h-3.5" />;
-    buttonText = "Get App";
+  try {
+    const url = new URL(value);
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return url.toString();
+    }
+  } catch {
+    return fallback;
   }
 
-  const ratingVal = (4.2 + ((project.stars * 3) % 8) / 10).toFixed(1);
+  return fallback;
+}
+
+export function ProjectCard({ project }: { project: DiscoverApp }) {
+  const [imgError, setImgError] = useState(false);
+  const isWebOnly =
+    project.available_platforms.length === 1 &&
+    project.available_platforms[0] === "web";
+  const downloadUrl = isWebOnly
+    ? safeExternalLink(project.homepage, project.repo_url)
+    : `/api/download/${encodeURIComponent(project.owner)}/${encodeURIComponent(project.name)}`;
+  const platformTag =
+    project.available_platforms.length > 0
+      ? PLATFORM_LABELS[project.available_platforms[0]] ?? project.available_platforms[0]
+      : "GitHub";
+  const showLogo = !!project.logo_url && !imgError;
 
   return (
-    <Card className="shadcn-card-hover flex flex-col justify-between border-slate-200/80 bg-white">
-      <CardHeader className="flex flex-row items-center gap-4 p-5 pb-3">
-        <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center overflow-hidden border border-slate-100/50 shrink-0">
-          {project.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={project.logo_url} alt={project.name} className="w-full h-full object-cover animate-fade-in" />
-          ) : (
-            <span className="text-lg font-bold text-slate-700">
-              {project.name.charAt(0).toUpperCase()}
-            </span>
-          )}
+    <article className="pin-card">
+      <div className="app-card-visual">
+        {showLogo ? (
+          <div className="app-card-logo-frame">
+            <Image
+              src={project.logo_url!}
+              alt={`${project.name} logo`}
+              fill
+              sizes="92px"
+              onError={() => setImgError(true)}
+              className="object-contain p-4 animate-fade-in"
+            />
+          </div>
+        ) : (
+          <span className="app-card-fallback" aria-hidden="true">
+            {project.name.charAt(0).toUpperCase()}
+          </span>
+        )}
+
+        <span className="pin-overlay-pill">{platformTag}</span>
+
+        {project.health_score >= 80 && (
+          <span className="app-health-pill">
+            <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+            {project.health_score}%
+          </span>
+        )}
+      </div>
+
+      <div className="app-card-body">
+        <div className="app-card-title-row">
+          <div className="min-w-0">
+            <h3 className="app-card-title truncate">{project.name}</h3>
+            <p className="app-card-owner mono-label truncate">{project.owner}</p>
+          </div>
+          <a
+            href={project.repo_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-icon-circular shrink-0"
+            aria-label={`Open ${project.name} on GitHub`}
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+          </a>
         </div>
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-slate-900 truncate leading-none mb-1.5">{project.name}</h3>
-          <p className="text-xs text-slate-500 truncate">{project.owner}</p>
-        </div>
-      </CardHeader>
-      
-      <CardContent className="px-5 py-0 flex-1">
-        <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed mb-4">
-          {project.description ?? "An open source application discovered from GitHub releases."}
+
+        <p className="app-card-description type-body-sm line-clamp-2">
+          {project.description || "Open-source project indexed from GitHub releases."}
         </p>
-        
-        <div className="flex items-center gap-4 text-xs text-slate-500 mb-4">
-          <div className="flex items-center gap-1">
-            <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-            <span className="font-semibold text-slate-800">{ratingVal}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="font-semibold text-emerald-700">{project.health_score}% health</span>
-          </div>
-        </div>
 
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {project.available_platforms.map((p) => (
-            <Badge key={p} variant="secondary" className="px-2 py-0.5 rounded text-[10px] font-medium flex items-center gap-1 border-slate-100 text-slate-600 bg-slate-100">
-              {PLATFORM_ICONS[p]}
-              <span>{PLATFORM_LABELS[p] || p}</span>
-            </Badge>
-          ))}
-        </div>
-      </CardContent>
+        <div className="app-card-footer">
+          <span className="app-card-stars mono-label">
+            <Star className="h-3.5 w-3.5 fill-[var(--warning)] stroke-[var(--warning)]" />
+            {project.stars >= 1000
+              ? `${(project.stars / 1000).toFixed(1)}k`
+              : project.stars}
+          </span>
 
-      <CardFooter className="p-5 pt-3 border-t border-slate-100 bg-slate-50/50 rounded-b-xl flex items-center justify-between gap-4">
-        <div className="text-xs text-slate-400">
-          ★ {project.stars.toLocaleString()} stars
+          <a
+            href={downloadUrl}
+            target={isWebOnly ? "_blank" : undefined}
+            rel={isWebOnly ? "noopener noreferrer" : undefined}
+            className="btn-primary-sm"
+          >
+            {isWebOnly ? (
+              <>
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                Open
+              </>
+            ) : (
+              <>
+                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                Install
+              </>
+            )}
+          </a>
         </div>
-        <a
-          href={downloadUrl}
-          target={isWebOnly ? "_blank" : undefined}
-          rel={isWebOnly ? "noopener noreferrer" : undefined}
-          className="inline-flex items-center justify-center gap-1.5 h-9 rounded-lg px-4 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-sm"
-        >
-          {buttonIcon}
-          <span>{buttonText}</span>
-        </a>
-      </CardFooter>
-    </Card>
+      </div>
+    </article>
   );
 }

@@ -1,20 +1,21 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Header } from "@/components/discover/header";
-import { FeaturedHero } from "@/components/discover/featured-hero";
 import { ProjectGrid } from "@/components/discover/project-grid";
 import { Footer } from "@/components/shared/footer";
+import { SignupModal } from "@/components/shared/signup-modal";
 import { useDiscover } from "@/hooks/use-discover";
 
 export default function Home() {
+  const [signupOpen, setSignupOpen] = useState(false);
+
   const {
     selectedCategory,
     setSelectedCategory,
     searchQuery,
     setSearchQuery,
     filteredItems,
-    featuredProject,
     isLoading,
     isError,
     fetchNextPage,
@@ -23,19 +24,14 @@ export default function Home() {
   } = useDiscover();
 
   return (
-    <main className="min-h-screen bg-background bg-dot-pattern pb-16">
+    <main className="page-shell">
       <Header
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onLogoClick={() => setSelectedCategory("all")}
         selectedCategory={selectedCategory}
         onSelectCategory={setSelectedCategory}
-      />
-
-      <FeaturedHero
-        featuredProject={featuredProject}
-        isLoading={isLoading}
-        isError={isError}
+        onOpenSignup={() => setSignupOpen(true)}
       />
 
       <ProjectGrid
@@ -50,6 +46,8 @@ export default function Home() {
       />
 
       <Footer />
+
+      {signupOpen && <SignupModal onClose={() => setSignupOpen(false)} />}
     </main>
   );
 }

@@ -46,7 +46,7 @@ export function archOf(filename: string): string | null {
   if (n.includes("arm")) {
     return "arm";
   }
-  if (n.includes("i386") || n.includes("x86") || n.includes("386")) {
+  if (n.includes("ia32") || n.includes("i386") || n.includes("x86") || n.includes("386")) {
     return "x86";
   }
   return null;

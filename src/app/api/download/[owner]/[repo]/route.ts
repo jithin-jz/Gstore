@@ -1,92 +1,146 @@
 import { NextResponse } from "next/server";
-import { detectPlatform, pickBest, extOf, platformOf, archOf, Asset } from "@/lib/platforms";
+import {
+  archOf,
+  detectPlatform,
+  extOf,
+  pickBest,
+  platformOf,
+  type Asset,
+} from "@/lib/platforms";
+import {
+  createGitHubHeaders,
+  GITHUB_API_BASE,
+  isTrustedGitHubAssetUrl,
+  isValidGitHubOwner,
+  isValidGitHubRepo,
+  repoApiPath,
+  safeHttpUrl,
+  type GitHubRelease,
+  type GitHubRepo,
+} from "@/lib/github";
+import { checkRateLimit, getClientIp, rateLimitHeaders } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
+
+const FETCH_TIMEOUT_MS = 8000;
+const DOWNLOAD_RATE_LIMIT = 80;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+
+async function fetchGitHubJson<T>(
+  url: string,
+  headers: HeadersInit
+): Promise<T | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      headers,
+      signal: controller.signal,
+      next: { revalidate: 3600 },
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    return (await res.json()) as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function redirectTo(url: string, headers: HeadersInit) {
+  return NextResponse.redirect(url, {
+    headers: {
+      "Cache-Control": "no-store",
+      ...headers,
+    },
+  });
+}
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ owner: string; repo: string }> }
 ) {
   const { owner, repo } = await params;
-  const fullName = `${owner}/${repo}`;
+
+  if (!isValidGitHubOwner(owner) || !isValidGitHubRepo(repo)) {
+    return NextResponse.json(
+      { error: "Invalid repository path" },
+      { status: 400, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
+  const rateLimit = checkRateLimit(
+    `download:${getClientIp(request)}`,
+    DOWNLOAD_RATE_LIMIT,
+    RATE_LIMIT_WINDOW_MS
+  );
+  const responseHeaders = rateLimitHeaders(rateLimit);
+
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many download requests" },
+      { status: 429, headers: { "Cache-Control": "no-store", ...responseHeaders } }
+    );
+  }
+
+  const encodedPath = repoApiPath(owner, repo);
+  const githubUrl = `https://github.com/${encodedPath}`;
+  let fallbackUrl = githubUrl;
 
   const userAgent = request.headers.get("user-agent") || "";
   const platform = detectPlatform(userAgent);
   const uaLower = userAgent.toLowerCase();
-  const arch = uaLower.includes("arm64") || uaLower.includes("aarch64") ? "arm64" : "x64";
-
-  const token = process.env.GITHUB_TOKEN;
-  const headers: HeadersInit = {
-    Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "GitHubStore-NextJS"
-  };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  let homepageUrl = "";
-  let githubUrl = `https://github.com/${fullName}`;
-  let fallbackUrl = githubUrl;
+  const arch =
+    uaLower.includes("arm64") || uaLower.includes("aarch64") ? "arm64" : "x64";
+  const headers = createGitHubHeaders();
 
   try {
-    const repoRes = await fetch(`https://api.github.com/repos/${fullName}`, {
-      headers,
-      next: { revalidate: 3600 }
-    });
-    if (repoRes.ok) {
-      const repoData = await repoRes.json();
-      homepageUrl = repoData.homepage || "";
-      githubUrl = repoData.html_url || githubUrl;
-      fallbackUrl = homepageUrl || githubUrl;
+    const repoData = await fetchGitHubJson<GitHubRepo>(
+      `${GITHUB_API_BASE}/repos/${encodedPath}`,
+      headers
+    );
+
+    if (repoData) {
+      const safeGithubUrl = safeHttpUrl(repoData.html_url, githubUrl);
+      fallbackUrl = safeHttpUrl(repoData.homepage, safeGithubUrl);
     }
 
     if (platform === "web") {
-      return NextResponse.redirect(fallbackUrl);
+      return redirectTo(fallbackUrl, responseHeaders);
     }
 
-    const releasesRes = await fetch(`https://api.github.com/repos/${fullName}/releases?per_page=10`, {
-      headers,
-      next: { revalidate: 3600 }
-    });
-    
-    if (!releasesRes.ok) {
-      return NextResponse.redirect(fallbackUrl);
-    }
+    const releases = await fetchGitHubJson<GitHubRelease[]>(
+      `${GITHUB_API_BASE}/repos/${encodedPath}/releases?per_page=10`,
+      headers
+    );
 
-    const releases = await releasesRes.json();
     if (!Array.isArray(releases) || releases.length === 0) {
-      return NextResponse.redirect(fallbackUrl);
+      return redirectTo(fallbackUrl, responseHeaders);
     }
 
-    let targetRelease = null;
-    for (const r of releases) {
-      if (!r.prerelease && r.assets && r.assets.length > 0) {
-        targetRelease = r;
-        break;
-      }
-    }
-    if (!targetRelease && releases.length > 0) {
-      targetRelease = releases[0];
-    }
+    const targetRelease =
+      releases.find((release) => !release.prerelease && release.assets?.length) ||
+      releases.find((release) => release.assets?.length);
 
-    const assets = targetRelease?.assets || [];
-    const wrappedAssets: Asset[] = assets.map((a: any) => ({
-      name: a.name,
-      download_url: a.browser_download_url,
-      extension: extOf(a.name),
-      platform: platformOf(a.name),
-      arch: archOf(a.name)
+    const wrappedAssets: Asset[] = (targetRelease?.assets || []).map((asset) => ({
+      name: asset.name,
+      download_url: asset.browser_download_url,
+      extension: extOf(asset.name),
+      platform: platformOf(asset.name),
+      arch: archOf(asset.name),
     }));
 
     const bestAsset = pickBest(wrappedAssets, platform, arch);
-    if (bestAsset) {
-      return NextResponse.redirect(bestAsset.download_url);
+    if (bestAsset && isTrustedGitHubAssetUrl(bestAsset.download_url)) {
+      return redirectTo(bestAsset.download_url, responseHeaders);
     }
 
-    return NextResponse.redirect(fallbackUrl);
+    return redirectTo(fallbackUrl, responseHeaders);
   } catch (error) {
     console.error("Download error:", error);
-    return NextResponse.redirect(fallbackUrl);
+    return redirectTo(fallbackUrl, responseHeaders);
   }
 }
